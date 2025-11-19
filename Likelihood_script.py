@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from iminuit import Minuit
 
-path = "/Users/albaburgosmondejar/Desktop/Dataset/" 
+path = "/Users/albaburgosmondejar/Desktop/Dataset2/" 
 eta_col1, eta_col2 = "l1_eta", "l2_eta"
 qpt_col1, qpt_col2 = "l1_q_over_pt", "l2_q_over_pt"
 label_col = "opposite_charge"  # 0 => SS, 1 => OS
@@ -33,16 +33,15 @@ df = pd.concat([pd.read_pickle(f) for f in pkl_files], ignore_index=True)
 need = [eta_col1, eta_col2, qpt_col1, qpt_col2, label_col]
 
 #Background subtraction and selection of Z-peak
-mask_low  = (df["m_l1l2"] >  71000) & (df["m_l1l2"] <  81000)
-mask_high = (df["m_l1l2"] > 101000) & (df["m_l1l2"] < 111000)
+# mask_low  = (df["m_l1l2"] >  71000) & (df["m_l1l2"] <  81000)
+# mask_high = (df["m_l1l2"] > 101000) & (df["m_l1l2"] < 111000)
 mask_Z    = (df["m_l1l2"] >= 81000) & (df["m_l1l2"] <= 101000)
-len_A = mask_low.sum()
-len_B = mask_Z.sum()
-len_C = mask_high.sum()
-N_sig = len_B - (len_A + len_C)/2
-factor_bck = N_sig / len_B
-print(factor_bck)
-print(factor_bck)
+# len_A = mask_low.sum()
+# len_B = mask_Z.sum()
+# len_C = mask_high.sum()
+# N_sig = len_B - (len_A + len_C)/2
+# factor_bck = N_sig / len_B
+factor_bck = 0.976
 
 df = df[need][mask_Z].copy()
 df[qpt_col1] = ( 1/df[qpt_col1]).abs() *1e-3
@@ -62,11 +61,11 @@ SS = hist4(df[df[label_col] == 0])  * factor_bck
 OS = hist4(df[df[label_col] == 1])  * factor_bck
 Array_SS, Array_OS = SS, OS
 ALL = SS + OS
-ALL = np.where(ALL <= 0.0, EPS, ALL)
+# ALL = np.where(ALL <= 0.0, EPS, ALL)
 
-def nll(par, Array_SS, Array_OS, eps=EPS):
-    SS = np.asarray(Array_SS, dtype=np.float64) 
-    OS = np.asarray(Array_OS, dtype=np.float64) 
+def nll(par, Array_SS, Array_OS, eps=1e-18):
+    SS = np.asarray(Array_SS, dtype=np.float64)
+    OS = np.asarray(Array_OS, dtype=np.float64)
 
     E1, E2, P1, P2 = SS.shape
     assert E1 == E2 and P1 == P2
@@ -74,7 +73,6 @@ def nll(par, Array_SS, Array_OS, eps=EPS):
 
     par = np.asarray(par, dtype=np.float64).reshape(NBINS_ETA, NBINS_PT)
 
-    # par[eta1,pt1] + par[eta2,pt2]
     Psum = par[:, None, :, None] + par[None, :, None, :]
 
     ALL = SS + OS
@@ -83,13 +81,12 @@ def nll(par, Array_SS, Array_OS, eps=EPS):
     lam = ALL * Psum
     lam = np.where(lam <= 0.0, eps, lam)
 
-    # ss*log(lam) - lam 
     cell_ll = np.where(SS != 0.0, SS * np.log(lam) - lam, -lam)
 
-    # only sum upper-triangular in (eta1,eta2)
-    tri_mask = np.triu(np.ones((NBINS_ETA, NBINS_ETA), dtype=bool))[:, :, None, None]
-    ll = np.sum(np.where(tri_mask, cell_ll, 0.0))
+    tri = np.triu(np.ones((NBINS_ETA, NBINS_ETA), dtype=np.float64))
+    ll = np.sum(cell_ll * tri[:, :, None, None])
     ll = np.sum(cell_ll)
+
     return -ll
 
 E = NBINS_ETA
@@ -106,19 +103,12 @@ def nll_flat(*theta_flat):
 m = Minuit(nll_flat, *x0)
 
 for i in range(NPAR):
-    m.limits[i] = (0.0, 0.1)
+    m.limits[i] = (0.0, None)
 
 m.migrad(ncall=10_000_000)
 m.hesse()
 
 theta = np.array(m.values).reshape(E, P)
-
-ALL = Array_SS + Array_OS
-Psum = theta[:, None, :, None] + theta[None, :, None, :]
-lam = ALL * Psum
-tri_mask = np.triu(np.ones((E, P), dtype=bool))[:, :, None, None]
-obs_SS = Array_SS.sum()
-exp_SS = lam.sum()
 
 eta_centers = 0.5*(np.array(eta_edges[:-1]) + np.array(eta_edges[1:]))
 qpt_centers = 0.5*(np.array(qpt_edges[:-1]) + np.array(qpt_edges[1:]))
@@ -128,6 +118,7 @@ pc = ax.pcolormesh(eta_edges, qpt_edges, theta, shading='auto')
 
 ax.set_ylabel("pt (bin center)")
 ax.set_xlabel("eta (bin center)")
+ax.set_yscale('log') 
 
 fig.colorbar(pc, ax=ax, label="theta")
 ax.set_yticks(qpt_edges)
@@ -136,15 +127,19 @@ ax.set_yticklabels([f"{v:.2g}" for v in qpt_edges])
 ax.set_xticks(eta_edges)
 ax.set_xticklabels([f"{v:.2g}" for v in eta_edges])
 
+
 for i in range(P):  
-    for j in range(E):     
-        if j!=1:
+    for j in range(E): 
+        
+        if j != 1:
             ax.text(
-                eta_centers[j],     
-                qpt_centers[i],       
+                eta_centers[j],
+                qpt_centers[i],
                 f"{theta[i,j]:.2e}",
                 ha="center", va="center"
             )
+
+        print(theta[i,j])
 
 plt.tight_layout()
 plt.show()

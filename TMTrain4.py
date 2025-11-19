@@ -103,7 +103,7 @@ class KappaLightning(L.LightningModule, Visualisable):
     def get_input_scalars(self):
         return [
             Scalar("charge", bins=np.linspace(-1,1,2)),
-            Scalar("Pt", bins=np.logspace(2, 6, 100)),
+            Scalar("Pt", bins=np.linspace(5e3, 500e3, 100)),
             Scalar("eta", bins=np.linspace(0,2.5,100)),
             #Scalar("phi", bins=np.linspace(-np.pi,np.pi,100)),
         ]
@@ -137,7 +137,7 @@ class KappaLightning(L.LightningModule, Visualisable):
 if __name__ == "__main__":
     from iwpc.data_modules.pandas_directory_data_module import PandasDirDataModule
 
-    path = "/Users/albaburgosmondejar/Desktop/Dataset/"
+    path = "/Users/albaburgosmondejar/Desktop/DatasetShift/"
 
     dm = PandasDirDataModule(
         dataset_dir=path,
@@ -162,7 +162,7 @@ if __name__ == "__main__":
             # EarlyStopping(monitor="val_loss", patience=10, mode="min"),
             
         ],
-        logger=TensorBoardLogger(save_dir="dielectron_logs", name="kappa"),
+        logger=TensorBoardLogger(save_dir="shift_logs", name="kappa"),
         num_sanity_val_steps=0,
     )
 

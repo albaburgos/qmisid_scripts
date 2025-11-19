@@ -96,7 +96,7 @@ def prep_qmisid_single_df(fil):
 
     branches['l1_q_over_pt'] = branches['l1_pdg'] / (11*branches['l1_pt'])
     branches['l2_q_over_pt'] = branches['l2_pdg'] / (11*branches['l2_pt'])
-    mask = (branches["m_l1l2"] >= 71000) & (branches["m_l1l2"] <= 111000)
+    mask = (branches["m_l1l2"] >= 81000) & (branches["m_l1l2"] <= 101000)
     df = pd.DataFrame()
     exclude = {"l1_pdg", "l2_pdg", "l1_pt", "l2_pt"}
 
@@ -131,7 +131,7 @@ def prep_qmisid_df(fil):
     branches['l2_q_over_pt'] = branches['l2_pdg'] / (11*branches['l2_pt'])
     branches["qmisid"] = (branches["l1_isQMisID"] == 1) | (branches["l2_isQMisID"] == 1)
 
-    mask = (branches["m_l1l2"] >= 71000) & (branches["m_l1l2"] <= 111000)
+    mask = (branches["m_l1l2"] >= 81000) & (branches["m_l1l2"] <= 101000)
     df = pd.DataFrame()
     exclude = {"l1_pdg", "l2_pdg", "l1_pt", "l2_pt"}
     for k in branches.fields:
@@ -142,14 +142,72 @@ def prep_qmisid_df(fil):
     df['label'] = branches["opposite_charge"][mask]
     return df
 
+
+def prep_shift(fil):
+    with uproot.open(fil) as f:
+        branches = f['qmisid_cr'].arrays([
+            'same_charge',
+            'opposite_charge',
+            'l1_pdg',
+            'l2_pdg',
+            'l1_pt',
+            'l2_pt',
+            'l1_eta',
+            'l2_eta',
+            'l1_isQMisID',
+            'l2_isQMisID',
+            'm_l1l2',
+        ])
+    
+    branches['l1_q_over_pt'] = branches['l1_pdg'] / (11*branches['l1_pt'])
+    branches['l2_q_over_pt'] = branches['l2_pdg'] / (11*branches['l2_pt'])
+    mask = (branches["m_l1l2"] >= 81000) & (branches["m_l1l2"] <= 101000)
+    
+    mask1 = branches["same_charge"] == 1
+    
+    mass_shift = ak.where(
+    mask1,
+    branches["m_l1l2"]*0.97,   
+    branches["m_l1l2"]*1.00  
+)
+    
+    mask_l1 = (branches["same_charge"] == 1) & (branches["l1_isQMisID"] == 1)
+    mask_l2 = (branches["same_charge"] == 1) & (branches["l2_isQMisID"] == 1)
+
+    pt_l1_shift = ak.where(
+        mask_l1,
+        branches["l1_q_over_pt"] * 0.97,
+        branches["l1_q_over_pt"]
+    )
+
+    pt_l2_shift = ak.where(
+        mask_l2,
+        branches["l2_q_over_pt"] * 0.97,
+        branches["l2_q_over_pt"]
+    )
+        
+    df = pd.DataFrame()
+    exclude = {"l1_pdg", "l2_pdg", "l1_pt", "l2_pt", "m_l1l2", 'l1_q_over_pt', 'l2_q_over_pt'}
+    for k in branches.fields:
+        if k in exclude: continue
+        df[f'{k}'] = branches[k][:][mask]
+        print(k)
+
+    df['label'] = branches["opposite_charge"][mask]
+    df['m_l1l2'] = mass_shift[mask]
+    df['l2_q_over_pt'] = pt_l2_shift[mask]
+    df['l1_q_over_pt']= pt_l1_shift[mask]
+
+    return df
+
 if __name__ == '__main__':
 
-    root_dir = Path("/Users/albaburgosmondejar/Desktop/Input")
+    root_dir = Path("/Users/albaburgosmondejar/Desktop/Input2")
     with PandasDirDataModuleBuilder(
-        "/Users/albaburgosmondejar/Desktop/Dataset_Single",
+        "/Users/albaburgosmondejar/Desktop/DatasetShift",
         force=True,
         file_size=int(5e6),
     ) as builder:
         for root_file in tqdm(list(root_dir.glob("*.root"))):
-            df = prep_qmisid_single_df(root_file)
+            df = prep_shift(root_file)
             builder.write(df)

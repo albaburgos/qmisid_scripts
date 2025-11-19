@@ -73,12 +73,21 @@ class KappaLightning(L.LightningModule, Visualisable):
         return self._shared_step(batch, "val")
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=self.lr)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=self.lr,
+        total_steps=self.trainer.estimated_stepping_batches,
+        pct_start=0.03,
+        anneal_strategy="cos",
+    )
+        return [optimizer], [scheduler]
+    
     
     def get_input_scalars(self):
         return [
             Scalar("charge", bins=np.linspace(-1,1,2)),
-            Scalar("Pt", bins=np.logspace(5e3, 500e3, 100)),
+            Scalar("Pt", bins=np.linspace(5e3, 500e3, 100)),
             Scalar("eta", bins=np.linspace(0,2.5,100)),
             #Scalar("phi", bins=np.linspace(-np.pi,np.pi,100)),
         ]
@@ -132,13 +141,13 @@ if __name__ == "__main__":
 
     trainer = L.Trainer(
         accelerator="gpu",
-        max_epochs=4,
+        max_epochs=200,
         log_every_n_steps=50,
         callbacks=[
             ModelCheckpoint(save_top_k=1, monitor="val_loss", mode="min"),
             # EarlyStopping(monitor="val_loss", patience=10, mode="min"),
         ],
-        logger=TensorBoardLogger(save_dir="phi_logs", name="phi_basic"),
+        logger=TensorBoardLogger(save_dir="phi_logs", name="kappa"),
         num_sanity_val_steps=0,
     )
 
